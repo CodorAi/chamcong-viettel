@@ -3,6 +3,15 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import io
+import os
+
+LOG_FILE = "history_log.csv"
+
+def log_action(user, action, details):
+    timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    new_log = pd.DataFrame([[timestamp, user, action, details]], columns=["Thời gian", "Người dùng", "Hành động", "Chi tiết"])
+    if not os.path.exists(LOG_FILE): new_log.to_csv(LOG_FILE, index=False, encoding='utf-8-sig')
+    else: new_log.to_csv(LOG_FILE, mode='a', header=False, index=False, encoding='utf-8-sig')
 
 st.set_page_config(page_title="Viettel - Hệ thống Chấm công AI", page_icon="🏢", layout="wide")
 
@@ -18,6 +27,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
+if 'user_role' not in st.session_state: st.session_state['user_role'] = ""
 
 if not st.session_state['logged_in']:
     st.markdown('<div class="main-header">🏢 HỆ THỐNG CHẤM CÔNG THÔNG MINH</div>', unsafe_allow_html=True)
@@ -29,11 +39,43 @@ if not st.session_state['logged_in']:
         if st.button("🚀 Kích hoạt phần mềm", use_container_width=True):
             if pwd.strip() == "VIETTEL2026":
                 st.session_state['logged_in'] = True
+                st.session_state['user_role'] = "HR"
+                log_action("HR_User", "Đăng nhập", "Đăng nhập thành công vào hệ thống")
+                st.rerun()
+            elif pwd.strip() == "ADMIN2026":
+                st.session_state['logged_in'] = True
+                st.session_state['user_role'] = "ADMIN"
+                log_action("Admin", "Đăng nhập Quản trị", "Truy cập hệ thống xem lịch sử")
                 st.rerun()
             else:
+                log_action("Khách lạ", "Đăng nhập thất bại", f"Nhập sai mã: {pwd}")
                 st.error("Mã kích hoạt không đúng hoặc đã hết hạn!")
     st.stop()
 
+# ==========================================
+# TRANG QUẢN TRỊ VIÊN
+if st.session_state['user_role'] == "ADMIN":
+    st.markdown('<div class="main-header">🛡️ TRANG QUẢN TRỊ HỆ THỐNG</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Chỉ dành cho Giám đốc / Quản trị viên</div>', unsafe_allow_html=True)
+    st.success("✅ Bạn đang đăng nhập dưới quyền Admin cao nhất.")
+    
+    st.markdown("### 📜 Lịch sử thao tác (Audit Log)")
+    if os.path.exists(LOG_FILE):
+        df_log = pd.read_csv(LOG_FILE)
+        st.dataframe(df_log.sort_values(by="Thời gian", ascending=False), use_container_width=True)
+        csv = df_log.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(label="📥 Tải nhật ký hệ thống (CSV)", data=csv, file_name='nhat_ky_he_thong.csv', mime='text/csv')
+    else:
+        st.info("Hệ thống chưa ghi nhận thao tác nào.")
+        
+    if st.button("🚪 Đăng xuất"):
+        log_action("Admin", "Đăng xuất", "Rời khỏi hệ thống")
+        st.session_state['logged_in'] = False
+        st.rerun()
+    st.stop()
+
+# ==========================================
+# TRANG NHÂN VIÊN HR
 st.markdown('<div class="main-header">🏢 HỆ THỐNG CHẤM CÔNG THÔNG MINH</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Bản quyền phần mềm thuộc quản lý của Viettel</div>', unsafe_allow_html=True)
 
@@ -41,10 +83,7 @@ with st.sidebar:
     st.markdown('<div class="viettel-logo-container"><div class="viettel-text">VIETTEL</div></div>', unsafe_allow_html=True)
     st.markdown("---")
     
-    st.info("💡 **Mẹo:** Chọn **⋮** góc phải ➡️ **Settings** ➡️ **Theme** để đổi Giao diện Tối/Sáng.")
-    
     st.header("⚙️ Cấu hình thời gian")
-    
     col_m1, col_m2 = st.columns(2)
     with col_m1: start_morning_str = st.text_input("🌅 Vào sáng", value="07:30")
     with col_m2: end_morning_str = st.text_input("🕛 Ra sáng", value="12:00")
@@ -58,7 +97,14 @@ with st.sidebar:
     with col_c2: split_hour = st.number_input("⏱️ Giờ tách", value=13, min_value=12, max_value=14, step=1)
     
     st.markdown("---")
-    if st.button("Đăng xuất"):
+    st.header("🌴 Ngoại lệ nghỉ lễ & làm bù")
+    st.caption("Nhập ngày theo định dạng DD/MM (cách nhau bởi dấu phẩy)")
+    holidays_str = st.text_input("Bỏ qua ngày nghỉ lễ (VD: 02/09, 03/09):", value="")
+    comp_days_str = st.text_input("Tính công ngày làm bù T7/CN (VD: 05/09):", value="")
+    
+    st.markdown("---")
+    if st.button("🚪 Đăng xuất"):
+        log_action("HR_User", "Đăng xuất", "Rời khỏi hệ thống")
         st.session_state['logged_in'] = False
         st.rerun()
 
@@ -80,6 +126,16 @@ def find_header(df_temp):
         if any(isinstance(val, str) and 'Họ tên' in val for val in row.values): return idx
     return 0
 
+def parse_dates_str(d_str, year):
+    dates = []
+    if not d_str: return dates
+    for s in d_str.split(','):
+        s = s.strip()
+        if s:
+            try: dates.append(datetime.strptime(f"{s}/{year}", "%d/%m/%Y").date())
+            except: pass
+    return dates
+
 if uploaded_file is not None:
     with st.spinner("⏳ Đang xử lý dữ liệu..."):
         try:
@@ -91,14 +147,10 @@ if uploaded_file is not None:
                 st.error("❌ File không đúng định dạng log gốc.")
                 st.stop()
                 
-            # Hệ thống nhận diện cột Phòng ban thường lưu ở cột "Căn hộ" hoặc "Công ty"
             dept_col = None
-            if 'Căn hộ' in df.columns and not df['Căn hộ'].isna().all():
-                dept_col = 'Căn hộ'
-            elif 'Công ty' in df.columns and not df['Công ty'].isna().all():
-                dept_col = 'Công ty'
-            elif 'Phòng ban' in df.columns:
-                dept_col = 'Phòng ban'
+            if 'Căn hộ' in df.columns and not df['Căn hộ'].isna().all(): dept_col = 'Căn hộ'
+            elif 'Công ty' in df.columns and not df['Công ty'].isna().all(): dept_col = 'Công ty'
+            elif 'Phòng ban' in df.columns: dept_col = 'Phòng ban'
                 
             in_punches = df[['Họ tên', 'Thời điểm vào'] + ([dept_col] if dept_col else [])].rename(columns={'Thời điểm vào': 'Thời gian'})
             out_punches = df[['Họ tên', 'Thời điểm ra'] + ([dept_col] if dept_col else [])].rename(columns={'Thời điểm ra': 'Thời gian'})
@@ -115,8 +167,13 @@ if uploaded_file is not None:
             all_punches['Giờ'] = all_punches['Thời gian'].dt.time
             
             min_date, max_date = all_punches['Ngày'].min(), all_punches['Ngày'].max()
+            current_year = min_date.year
+            
+            holidays = parse_dates_str(holidays_str, current_year)
+            comp_days = parse_dates_str(comp_days_str, current_year)
+            
             all_days = [min_date + timedelta(days=x) for x in range((max_date - min_date).days + 1)]
-            work_days = [d for d in all_days if d.weekday() < 5]
+            expected_work_days = set([d for d in all_days if (d.weekday() < 5 and d not in holidays) or (d in comp_days)])
             
             employees = all_punches['Họ tên'].unique()
             results = []
@@ -130,11 +187,18 @@ if uploaded_file is not None:
                 emp_data = all_punches[all_punches['Họ tên'] == emp]
                 dept_val = emp_data[dept_col].iloc[0] if dept_col and not emp_data[dept_col].isna().all() else 'Chưa phân bổ'
                 
-                for wd in work_days:
+                # Check actual punch days + expected work days
+                actual_days = set(emp_data['Ngày'].unique())
+                days_to_check = sorted(list(expected_work_days.union(actual_days)))
+                
+                for wd in days_to_check:
                     day_data = emp_data[emp_data['Ngày'] == wd].sort_values('Thời gian')
                     date_str = wd.strftime('%d/%m/%Y')
                     
                     if day_data.empty:
+                        # Đi làm vào ngày nghỉ/lễ nhưng không có dữ liệu -> Bỏ qua
+                        if wd not in expected_work_days: continue
+                        
                         results.append({
                             'Họ tên': emp, 'Đơn vị / Phòng ban': dept_val, 'Ngày': date_str,
                             'Vào sáng': '', 'Ra sáng': '', 'Vào chiều': '', 'Ra chiều': '',
@@ -165,6 +229,10 @@ if uploaded_file is not None:
                             notes.append("Về sớm chiều")
                             
                     status = 'Đi làm' if len(notes) == 0 else 'Vi phạm'
+                    # Ngoại lệ: Nếu làm vào ngày nghỉ mà không vi phạm, ghi chú thêm
+                    if wd not in expected_work_days and len(notes) == 0:
+                        status = 'Tăng ca ngày nghỉ'
+                    
                     fmt = lambda t: t.strftime('%H:%M:%S') if t else ''
                     
                     results.append({
@@ -175,6 +243,7 @@ if uploaded_file is not None:
                     })
                     
             df_res = pd.DataFrame(results)
+            log_action("HR_User", "Phân tích file", f"Đã xuất báo cáo cho {len(employees)} nhân viên từ file {uploaded_file.name}")
             
             st.markdown("### 2️⃣ Bảng Điều Khiển & Bộ Lọc Báo Cáo")
             
@@ -186,7 +255,7 @@ if uploaded_file is not None:
                 all_depts = ["Tất cả"] + list(df_res['Đơn vị / Phòng ban'].unique())
                 selected_dept = col_f2.selectbox("🏢 Chọn Đơn vị:", all_depts)
                 
-                selected_status = col_f3.selectbox("⚠️ Trạng thái vi phạm:", ["Tất cả", "Vi phạm (Đi muộn/Về sớm)", "Vắng mặt", "Đi làm đúng giờ"])
+                selected_status = col_f3.selectbox("⚠️ Trạng thái:", ["Tất cả", "Vi phạm (Đi muộn/Về sớm)", "Vắng mặt", "Đi làm đúng giờ", "Tăng ca ngày nghỉ"])
 
             df_filtered = df_res.copy()
             if selected_date != "Tất cả": df_filtered = df_filtered[df_filtered['Ngày'] == selected_date]
@@ -195,13 +264,14 @@ if uploaded_file is not None:
             if selected_status == "Vi phạm (Đi muộn/Về sớm)": df_filtered = df_filtered[df_filtered['Trạng thái'] == 'Vi phạm']
             elif selected_status == "Vắng mặt": df_filtered = df_filtered[df_filtered['Trạng thái'] == 'Vắng mặt']
             elif selected_status == "Đi làm đúng giờ": df_filtered = df_filtered[df_filtered['Trạng thái'] == 'Đi làm']
+            elif selected_status == "Tăng ca ngày nghỉ": df_filtered = df_filtered[df_filtered['Trạng thái'] == 'Tăng ca ngày nghỉ']
                 
             st.markdown("##### 📊 Thống kê nhanh theo bộ lọc:")
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Tổng số lượt", len(df_filtered))
             c2.metric("Số lượt Vắng", len(df_filtered[df_filtered['Trạng thái'] == 'Vắng mặt']))
             c3.metric("Số lượt Vi phạm", len(df_filtered[df_filtered['Trạng thái'] == 'Vi phạm']))
-            c4.metric("Số lượt Đi làm chuẩn", len(df_filtered[df_filtered['Trạng thái'] == 'Đi làm']))
+            c4.metric("Số lượt Đi làm chuẩn/Tăng ca", len(df_filtered[df_filtered['Trạng thái'].isin(['Đi làm', 'Tăng ca ngày nghỉ'])]))
             
             st.dataframe(df_filtered, use_container_width=True)
             
