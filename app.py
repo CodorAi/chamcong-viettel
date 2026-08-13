@@ -12,20 +12,8 @@ st.markdown("""
     .sub-header { font-size: 1.1rem; color: var(--text-color); text-align: center; margin-bottom: 30px; opacity: 0.8; }
     .stButton>button { background-color: #E60000; color: white; border-radius: 8px; font-weight: bold; padding: 10px 20px; border: none; transition: 0.3s; }
     .stButton>button:hover { background-color: #cc0000; box-shadow: 0px 4px 10px rgba(230, 0, 0, 0.3); color: white;}
-    
-    /* Logo Viettel CSS Fake */
-    .viettel-logo-container {
-        text-align: center;
-        padding: 10px;
-        margin-bottom: 10px;
-    }
-    .viettel-text {
-        color: #E60000;
-        font-weight: 900;
-        font-size: 32px;
-        font-family: Arial, sans-serif;
-        letter-spacing: -1px;
-    }
+    .viettel-logo-container { text-align: center; padding: 10px; margin-bottom: 10px; }
+    .viettel-text { color: #E60000; font-weight: 900; font-size: 32px; font-family: Arial, sans-serif; letter-spacing: -1px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -39,7 +27,7 @@ if not st.session_state['logged_in']:
         st.info("Vui lòng nhập Mã kích hoạt bản quyền để sử dụng")
         pwd = st.text_input("🔑 Mã kích hoạt:", type="password")
         if st.button("🚀 Kích hoạt phần mềm", use_container_width=True):
-            if pwd == "VIETTEL2026":
+            if pwd.strip() == "VIETTEL2026":
                 st.session_state['logged_in'] = True
                 st.rerun()
             else:
@@ -50,7 +38,6 @@ st.markdown('<div class="main-header">🏢 HỆ THỐNG CHẤM CÔNG THÔNG MINH
 st.markdown('<div class="sub-header">Bản quyền phần mềm thuộc quản lý của Viettel</div>', unsafe_allow_html=True)
 
 with st.sidebar:
-    # Thay thế ảnh bị lỗi bằng text logo đỏ đậm chuẩn màu Viettel
     st.markdown('<div class="viettel-logo-container"><div class="viettel-text">VIETTEL</div></div>', unsafe_allow_html=True)
     st.markdown("---")
     
@@ -104,9 +91,17 @@ if uploaded_file is not None:
                 st.error("❌ File không đúng định dạng log gốc.")
                 st.stop()
                 
-            company_col = 'Công ty' if 'Công ty' in df.columns else None
-            in_punches = df[['Họ tên', 'Thời điểm vào'] + ([company_col] if company_col else [])].rename(columns={'Thời điểm vào': 'Thời gian'})
-            out_punches = df[['Họ tên', 'Thời điểm ra'] + ([company_col] if company_col else [])].rename(columns={'Thời điểm ra': 'Thời gian'})
+            # Hệ thống nhận diện cột Phòng ban thường lưu ở cột "Căn hộ" hoặc "Công ty"
+            dept_col = None
+            if 'Căn hộ' in df.columns and not df['Căn hộ'].isna().all():
+                dept_col = 'Căn hộ'
+            elif 'Công ty' in df.columns and not df['Công ty'].isna().all():
+                dept_col = 'Công ty'
+            elif 'Phòng ban' in df.columns:
+                dept_col = 'Phòng ban'
+                
+            in_punches = df[['Họ tên', 'Thời điểm vào'] + ([dept_col] if dept_col else [])].rename(columns={'Thời điểm vào': 'Thời gian'})
+            out_punches = df[['Họ tên', 'Thời điểm ra'] + ([dept_col] if dept_col else [])].rename(columns={'Thời điểm ra': 'Thời gian'})
             
             all_punches = pd.concat([in_punches, out_punches]).dropna(subset=['Thời gian', 'Họ tên'])
             all_punches['Thời gian'] = pd.to_datetime(all_punches['Thời gian'], format='%d/%m/%Y %H:%M:%S', errors='coerce')
@@ -133,7 +128,7 @@ if uploaded_file is not None:
             
             for emp in employees:
                 emp_data = all_punches[all_punches['Họ tên'] == emp]
-                comp = emp_data[company_col].iloc[0] if company_col and not emp_data[company_col].isna().all() else 'Chưa phân bổ'
+                dept_val = emp_data[dept_col].iloc[0] if dept_col and not emp_data[dept_col].isna().all() else 'Chưa phân bổ'
                 
                 for wd in work_days:
                     day_data = emp_data[emp_data['Ngày'] == wd].sort_values('Thời gian')
@@ -141,7 +136,7 @@ if uploaded_file is not None:
                     
                     if day_data.empty:
                         results.append({
-                            'Họ tên': emp, 'Phòng ban': comp, 'Ngày': date_str,
+                            'Họ tên': emp, 'Đơn vị / Phòng ban': dept_val, 'Ngày': date_str,
                             'Vào sáng': '', 'Ra sáng': '', 'Vào chiều': '', 'Ra chiều': '',
                             'Tổng giờ': 0, 'Trạng thái': 'Vắng mặt', 'Ghi chú': ''
                         })
@@ -173,7 +168,7 @@ if uploaded_file is not None:
                     fmt = lambda t: t.strftime('%H:%M:%S') if t else ''
                     
                     results.append({
-                        'Họ tên': emp, 'Phòng ban': comp, 'Ngày': date_str,
+                        'Họ tên': emp, 'Đơn vị / Phòng ban': dept_val, 'Ngày': date_str,
                         'Vào sáng': fmt(in_m), 'Ra sáng': fmt(out_m), 'Vào chiều': fmt(in_a), 'Ra chiều': fmt(out_a),
                         'Tổng giờ': round(hrs_m + hrs_a, 2),
                         'Trạng thái': status, 'Ghi chú': ', '.join(notes)
@@ -188,14 +183,14 @@ if uploaded_file is not None:
                 all_dates = ["Tất cả"] + list(df_res['Ngày'].unique())
                 selected_date = col_f1.selectbox("📅 Chọn Ngày N:", all_dates)
                 
-                all_depts = ["Tất cả"] + list(df_res['Phòng ban'].unique())
-                selected_dept = col_f2.selectbox("🏢 Chọn Phòng ban:", all_depts)
+                all_depts = ["Tất cả"] + list(df_res['Đơn vị / Phòng ban'].unique())
+                selected_dept = col_f2.selectbox("🏢 Chọn Đơn vị:", all_depts)
                 
                 selected_status = col_f3.selectbox("⚠️ Trạng thái vi phạm:", ["Tất cả", "Vi phạm (Đi muộn/Về sớm)", "Vắng mặt", "Đi làm đúng giờ"])
 
             df_filtered = df_res.copy()
             if selected_date != "Tất cả": df_filtered = df_filtered[df_filtered['Ngày'] == selected_date]
-            if selected_dept != "Tất cả": df_filtered = df_filtered[df_filtered['Phòng ban'] == selected_dept]
+            if selected_dept != "Tất cả": df_filtered = df_filtered[df_filtered['Đơn vị / Phòng ban'] == selected_dept]
                 
             if selected_status == "Vi phạm (Đi muộn/Về sớm)": df_filtered = df_filtered[df_filtered['Trạng thái'] == 'Vi phạm']
             elif selected_status == "Vắng mặt": df_filtered = df_filtered[df_filtered['Trạng thái'] == 'Vắng mặt']
