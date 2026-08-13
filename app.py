@@ -4,20 +4,31 @@ import numpy as np
 from datetime import datetime, timedelta
 import io
 
-# Cấu hình trang
 st.set_page_config(page_title="Viettel - Hệ thống Chấm công AI", page_icon="🏢", layout="wide")
 
-# Tùy chỉnh CSS
 st.markdown("""
 <style>
     .main-header { font-size: 2.5rem; color: #E60000; font-weight: bold; text-align: center; margin-bottom: 0px; }
-    .sub-header { font-size: 1.1rem; color: #555555; text-align: center; margin-bottom: 30px; }
+    .sub-header { font-size: 1.1rem; color: var(--text-color); text-align: center; margin-bottom: 30px; opacity: 0.8; }
     .stButton>button { background-color: #E60000; color: white; border-radius: 8px; font-weight: bold; padding: 10px 20px; border: none; transition: 0.3s; }
-    .stButton>button:hover { background-color: #cc0000; box-shadow: 0px 4px 10px rgba(230, 0, 0, 0.3); }
+    .stButton>button:hover { background-color: #cc0000; box-shadow: 0px 4px 10px rgba(230, 0, 0, 0.3); color: white;}
+    
+    /* Logo Viettel CSS Fake */
+    .viettel-logo-container {
+        text-align: center;
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+    .viettel-text {
+        color: #E60000;
+        font-weight: 900;
+        font-size: 32px;
+        font-family: Arial, sans-serif;
+        letter-spacing: -1px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# Đăng nhập
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 
 if not st.session_state['logged_in']:
@@ -35,20 +46,29 @@ if not st.session_state['logged_in']:
                 st.error("Mã kích hoạt không đúng hoặc đã hết hạn!")
     st.stop()
 
-# --- GIAO DIỆN CHÍNH ---
 st.markdown('<div class="main-header">🏢 HỆ THỐNG CHẤM CÔNG THÔNG MINH</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Bản quyền phần mềm thuộc quản lý của Viettel</div>', unsafe_allow_html=True)
 
 with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/e/ee/Viettel_logo_2021.svg/512px-Viettel_logo_2021.svg.png", width=150)
+    # Thay thế ảnh bị lỗi bằng text logo đỏ đậm chuẩn màu Viettel
+    st.markdown('<div class="viettel-logo-container"><div class="viettel-text">VIETTEL</div></div>', unsafe_allow_html=True)
     st.markdown("---")
+    
+    st.info("💡 **Mẹo:** Chọn **⋮** góc phải ➡️ **Settings** ➡️ **Theme** để đổi Giao diện Tối/Sáng.")
+    
     st.header("⚙️ Cấu hình thời gian")
-    start_morning_str = st.text_input("🌅 Giờ vào ca sáng", value="07:30")
-    end_morning_str = st.text_input("🕛 Giờ ra ca sáng", value="12:00")
-    start_afternoon_str = st.text_input("☀️ Giờ vào ca chiều", value="13:30")
-    end_afternoon_str = st.text_input("🌆 Giờ ra ca chiều", value="17:00")
-    grace_period = st.number_input("⏳ Ân hạn (phút)", value=15, min_value=0, step=5)
-    split_hour = st.number_input("⏱️ Giờ tách ca", value=13, min_value=12, max_value=14, step=1)
+    
+    col_m1, col_m2 = st.columns(2)
+    with col_m1: start_morning_str = st.text_input("🌅 Vào sáng", value="07:30")
+    with col_m2: end_morning_str = st.text_input("🕛 Ra sáng", value="12:00")
+    
+    col_a1, col_a2 = st.columns(2)
+    with col_a1: start_afternoon_str = st.text_input("☀️ Vào chiều", value="13:30")
+    with col_a2: end_afternoon_str = st.text_input("🌆 Ra chiều", value="17:00")
+    
+    col_c1, col_c2 = st.columns(2)
+    with col_c1: grace_period = st.number_input("⏳ Ân hạn (p)", value=15, min_value=0, step=5)
+    with col_c2: split_hour = st.number_input("⏱️ Giờ tách", value=13, min_value=12, max_value=14, step=1)
     
     st.markdown("---")
     if st.button("Đăng xuất"):
@@ -138,7 +158,6 @@ if uploaded_file is not None:
                     hrs_m = calc_duration(in_m, out_m) if out_m else 0
                     hrs_a = calc_duration(in_a, out_a) if out_a else 0
                     
-                    # Tính đi muộn về sớm
                     notes = []
                     if in_m and std_start_m:
                         if (datetime.combine(datetime.today(), in_m) - datetime.combine(datetime.today(), std_start_m)).total_seconds()/60 > grace_period:
@@ -164,46 +183,33 @@ if uploaded_file is not None:
             
             st.markdown("### 2️⃣ Bảng Điều Khiển & Bộ Lọc Báo Cáo")
             
-            # --- BỘ LỌC THÔNG MINH ---
             with st.expander("🔍 Mở bộ lọc tùy chỉnh", expanded=True):
                 col_f1, col_f2, col_f3 = st.columns(3)
-                
-                # Bộ lọc ngày
                 all_dates = ["Tất cả"] + list(df_res['Ngày'].unique())
                 selected_date = col_f1.selectbox("📅 Chọn Ngày N:", all_dates)
                 
-                # Bộ lọc phòng ban
                 all_depts = ["Tất cả"] + list(df_res['Phòng ban'].unique())
                 selected_dept = col_f2.selectbox("🏢 Chọn Phòng ban:", all_depts)
                 
-                # Bộ lọc trạng thái
                 selected_status = col_f3.selectbox("⚠️ Trạng thái vi phạm:", ["Tất cả", "Vi phạm (Đi muộn/Về sớm)", "Vắng mặt", "Đi làm đúng giờ"])
 
-            # Áp dụng bộ lọc
             df_filtered = df_res.copy()
-            if selected_date != "Tất cả":
-                df_filtered = df_filtered[df_filtered['Ngày'] == selected_date]
-            if selected_dept != "Tất cả":
-                df_filtered = df_filtered[df_filtered['Phòng ban'] == selected_dept]
+            if selected_date != "Tất cả": df_filtered = df_filtered[df_filtered['Ngày'] == selected_date]
+            if selected_dept != "Tất cả": df_filtered = df_filtered[df_filtered['Phòng ban'] == selected_dept]
                 
-            if selected_status == "Vi phạm (Đi muộn/Về sớm)":
-                df_filtered = df_filtered[df_filtered['Trạng thái'] == 'Vi phạm']
-            elif selected_status == "Vắng mặt":
-                df_filtered = df_filtered[df_filtered['Trạng thái'] == 'Vắng mặt']
-            elif selected_status == "Đi làm đúng giờ":
-                df_filtered = df_filtered[df_filtered['Trạng thái'] == 'Đi làm']
+            if selected_status == "Vi phạm (Đi muộn/Về sớm)": df_filtered = df_filtered[df_filtered['Trạng thái'] == 'Vi phạm']
+            elif selected_status == "Vắng mặt": df_filtered = df_filtered[df_filtered['Trạng thái'] == 'Vắng mặt']
+            elif selected_status == "Đi làm đúng giờ": df_filtered = df_filtered[df_filtered['Trạng thái'] == 'Đi làm']
                 
-            # Thống kê nhanh từ dữ liệu đã lọc
             st.markdown("##### 📊 Thống kê nhanh theo bộ lọc:")
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Tổng số lượt (người/ngày)", len(df_filtered))
+            c1.metric("Tổng số lượt", len(df_filtered))
             c2.metric("Số lượt Vắng", len(df_filtered[df_filtered['Trạng thái'] == 'Vắng mặt']))
             c3.metric("Số lượt Vi phạm", len(df_filtered[df_filtered['Trạng thái'] == 'Vi phạm']))
             c4.metric("Số lượt Đi làm chuẩn", len(df_filtered[df_filtered['Trạng thái'] == 'Đi làm']))
             
             st.dataframe(df_filtered, use_container_width=True)
             
-            # Xuất file Excel
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df_filtered.to_excel(writer, index=False, sheet_name='DuLieuDaLoc')
@@ -215,7 +221,7 @@ if uploaded_file is not None:
                 st.download_button(
                     label=f"📥 TẢI XUỐNG BÁO CÁO ĐÃ LỌC EXCEL",
                     data=output.getvalue(),
-                    file_name="Bao_Cao_Cham_Cong_Da_Loc.xlsx",
+                    file_name="Bao_Cao_Cham_Cong.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
                 )
